@@ -24,11 +24,13 @@ const _ = grpc.SupportPackageIsVersion7
 type SqliteOGClient interface {
 	Query(ctx context.Context, in *Statement, opts ...grpc.CallOption) (*QueryResult, error)
 	Execute(ctx context.Context, in *Statement, opts ...grpc.CallOption) (*ExecuteResult, error)
-	ExecuteQuery(ctx context.Context, in *Statement, opts ...grpc.CallOption) (*ExecuteQueryResult, error)
-	CreateSQLiteFunction(ctx context.Context, in *Signature, opts ...grpc.CallOption) (*CreateFunctionResult, error)
+	ExecuteOrQuery(ctx context.Context, in *Statement, opts ...grpc.CallOption) (*ExecuteOrQueryResult, error)
 	Callback(ctx context.Context, opts ...grpc.CallOption) (SqliteOG_CallbackClient, error)
-	Connection(ctx context.Context, in *ConnectionRequest, opts ...grpc.CallOption) (*ConnectionResponse, error)
-	Close(ctx context.Context, in *CloseRequest, opts ...grpc.CallOption) (*Empty, error)
+	Connection(ctx context.Context, in *ConnectionRequest, opts ...grpc.CallOption) (*ConnectionId, error)
+	Close(ctx context.Context, in *ConnectionId, opts ...grpc.CallOption) (*Empty, error)
+	IsValid(ctx context.Context, in *ConnectionId, opts ...grpc.CallOption) (*Empty, error)
+	Ping(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	ResetSession(ctx context.Context, in *ConnectionId, opts ...grpc.CallOption) (*ConnectionId, error)
 }
 
 type sqliteOGClient struct {
@@ -57,18 +59,9 @@ func (c *sqliteOGClient) Execute(ctx context.Context, in *Statement, opts ...grp
 	return out, nil
 }
 
-func (c *sqliteOGClient) ExecuteQuery(ctx context.Context, in *Statement, opts ...grpc.CallOption) (*ExecuteQueryResult, error) {
-	out := new(ExecuteQueryResult)
-	err := c.cc.Invoke(ctx, "/SqliteOG/ExecuteQuery", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *sqliteOGClient) CreateSQLiteFunction(ctx context.Context, in *Signature, opts ...grpc.CallOption) (*CreateFunctionResult, error) {
-	out := new(CreateFunctionResult)
-	err := c.cc.Invoke(ctx, "/SqliteOG/CreateSQLiteFunction", in, out, opts...)
+func (c *sqliteOGClient) ExecuteOrQuery(ctx context.Context, in *Statement, opts ...grpc.CallOption) (*ExecuteOrQueryResult, error) {
+	out := new(ExecuteOrQueryResult)
+	err := c.cc.Invoke(ctx, "/SqliteOG/ExecuteOrQuery", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +99,8 @@ func (x *sqliteOGCallbackClient) Recv() (*Invoke, error) {
 	return m, nil
 }
 
-func (c *sqliteOGClient) Connection(ctx context.Context, in *ConnectionRequest, opts ...grpc.CallOption) (*ConnectionResponse, error) {
-	out := new(ConnectionResponse)
+func (c *sqliteOGClient) Connection(ctx context.Context, in *ConnectionRequest, opts ...grpc.CallOption) (*ConnectionId, error) {
+	out := new(ConnectionId)
 	err := c.cc.Invoke(ctx, "/SqliteOG/Connection", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -115,9 +108,36 @@ func (c *sqliteOGClient) Connection(ctx context.Context, in *ConnectionRequest, 
 	return out, nil
 }
 
-func (c *sqliteOGClient) Close(ctx context.Context, in *CloseRequest, opts ...grpc.CallOption) (*Empty, error) {
+func (c *sqliteOGClient) Close(ctx context.Context, in *ConnectionId, opts ...grpc.CallOption) (*Empty, error) {
 	out := new(Empty)
 	err := c.cc.Invoke(ctx, "/SqliteOG/Close", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sqliteOGClient) IsValid(ctx context.Context, in *ConnectionId, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/SqliteOG/IsValid", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sqliteOGClient) Ping(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/SqliteOG/Ping", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sqliteOGClient) ResetSession(ctx context.Context, in *ConnectionId, opts ...grpc.CallOption) (*ConnectionId, error) {
+	out := new(ConnectionId)
+	err := c.cc.Invoke(ctx, "/SqliteOG/ResetSession", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,11 +150,13 @@ func (c *sqliteOGClient) Close(ctx context.Context, in *CloseRequest, opts ...gr
 type SqliteOGServer interface {
 	Query(context.Context, *Statement) (*QueryResult, error)
 	Execute(context.Context, *Statement) (*ExecuteResult, error)
-	ExecuteQuery(context.Context, *Statement) (*ExecuteQueryResult, error)
-	CreateSQLiteFunction(context.Context, *Signature) (*CreateFunctionResult, error)
+	ExecuteOrQuery(context.Context, *Statement) (*ExecuteOrQueryResult, error)
 	Callback(SqliteOG_CallbackServer) error
-	Connection(context.Context, *ConnectionRequest) (*ConnectionResponse, error)
-	Close(context.Context, *CloseRequest) (*Empty, error)
+	Connection(context.Context, *ConnectionRequest) (*ConnectionId, error)
+	Close(context.Context, *ConnectionId) (*Empty, error)
+	IsValid(context.Context, *ConnectionId) (*Empty, error)
+	Ping(context.Context, *Empty) (*Empty, error)
+	ResetSession(context.Context, *ConnectionId) (*ConnectionId, error)
 	mustEmbedUnimplementedSqliteOGServer()
 }
 
@@ -148,20 +170,26 @@ func (UnimplementedSqliteOGServer) Query(context.Context, *Statement) (*QueryRes
 func (UnimplementedSqliteOGServer) Execute(context.Context, *Statement) (*ExecuteResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Execute not implemented")
 }
-func (UnimplementedSqliteOGServer) ExecuteQuery(context.Context, *Statement) (*ExecuteQueryResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ExecuteQuery not implemented")
-}
-func (UnimplementedSqliteOGServer) CreateSQLiteFunction(context.Context, *Signature) (*CreateFunctionResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateSQLiteFunction not implemented")
+func (UnimplementedSqliteOGServer) ExecuteOrQuery(context.Context, *Statement) (*ExecuteOrQueryResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteOrQuery not implemented")
 }
 func (UnimplementedSqliteOGServer) Callback(SqliteOG_CallbackServer) error {
 	return status.Errorf(codes.Unimplemented, "method Callback not implemented")
 }
-func (UnimplementedSqliteOGServer) Connection(context.Context, *ConnectionRequest) (*ConnectionResponse, error) {
+func (UnimplementedSqliteOGServer) Connection(context.Context, *ConnectionRequest) (*ConnectionId, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connection not implemented")
 }
-func (UnimplementedSqliteOGServer) Close(context.Context, *CloseRequest) (*Empty, error) {
+func (UnimplementedSqliteOGServer) Close(context.Context, *ConnectionId) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Close not implemented")
+}
+func (UnimplementedSqliteOGServer) IsValid(context.Context, *ConnectionId) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IsValid not implemented")
+}
+func (UnimplementedSqliteOGServer) Ping(context.Context, *Empty) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
+}
+func (UnimplementedSqliteOGServer) ResetSession(context.Context, *ConnectionId) (*ConnectionId, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResetSession not implemented")
 }
 func (UnimplementedSqliteOGServer) mustEmbedUnimplementedSqliteOGServer() {}
 
@@ -212,38 +240,20 @@ func _SqliteOG_Execute_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SqliteOG_ExecuteQuery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _SqliteOG_ExecuteOrQuery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Statement)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SqliteOGServer).ExecuteQuery(ctx, in)
+		return srv.(SqliteOGServer).ExecuteOrQuery(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/SqliteOG/ExecuteQuery",
+		FullMethod: "/SqliteOG/ExecuteOrQuery",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SqliteOGServer).ExecuteQuery(ctx, req.(*Statement))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _SqliteOG_CreateSQLiteFunction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Signature)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SqliteOGServer).CreateSQLiteFunction(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/SqliteOG/CreateSQLiteFunction",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SqliteOGServer).CreateSQLiteFunction(ctx, req.(*Signature))
+		return srv.(SqliteOGServer).ExecuteOrQuery(ctx, req.(*Statement))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -293,7 +303,7 @@ func _SqliteOG_Connection_Handler(srv interface{}, ctx context.Context, dec func
 }
 
 func _SqliteOG_Close_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CloseRequest)
+	in := new(ConnectionId)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -305,7 +315,61 @@ func _SqliteOG_Close_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: "/SqliteOG/Close",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SqliteOGServer).Close(ctx, req.(*CloseRequest))
+		return srv.(SqliteOGServer).Close(ctx, req.(*ConnectionId))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SqliteOG_IsValid_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConnectionId)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqliteOGServer).IsValid(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/SqliteOG/IsValid",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqliteOGServer).IsValid(ctx, req.(*ConnectionId))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SqliteOG_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqliteOGServer).Ping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/SqliteOG/Ping",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqliteOGServer).Ping(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SqliteOG_ResetSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConnectionId)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SqliteOGServer).ResetSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/SqliteOG/ResetSession",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SqliteOGServer).ResetSession(ctx, req.(*ConnectionId))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -326,12 +390,8 @@ var SqliteOG_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SqliteOG_Execute_Handler,
 		},
 		{
-			MethodName: "ExecuteQuery",
-			Handler:    _SqliteOG_ExecuteQuery_Handler,
-		},
-		{
-			MethodName: "CreateSQLiteFunction",
-			Handler:    _SqliteOG_CreateSQLiteFunction_Handler,
+			MethodName: "ExecuteOrQuery",
+			Handler:    _SqliteOG_ExecuteOrQuery_Handler,
 		},
 		{
 			MethodName: "Connection",
@@ -340,6 +400,18 @@ var SqliteOG_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Close",
 			Handler:    _SqliteOG_Close_Handler,
+		},
+		{
+			MethodName: "IsValid",
+			Handler:    _SqliteOG_IsValid_Handler,
+		},
+		{
+			MethodName: "Ping",
+			Handler:    _SqliteOG_Ping_Handler,
+		},
+		{
+			MethodName: "ResetSession",
+			Handler:    _SqliteOG_ResetSession_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

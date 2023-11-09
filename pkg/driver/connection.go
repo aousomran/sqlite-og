@@ -59,9 +59,13 @@ func (c *SQLiteOGConn) IsValid() bool {
 }
 
 func (c *SQLiteOGConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	params := make([]string, len(args))
+	for _, v := range args {
+		params[v.Ordinal] = fmt.Sprintf("%v", v.Value)
+	}
 	stmt := &pb.Statement{
 		Sql:    query,
-		Params: argsToParams(args),
+		Params: nil,
 		CnxId:  c.ID,
 	}
 	pbr, err := c.OGClient.Execute(ctx, stmt)
@@ -72,9 +76,13 @@ func (c *SQLiteOGConn) ExecContext(ctx context.Context, query string, args []dri
 }
 
 func (c *SQLiteOGConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	params := make([]string, len(args))
+	for _, v := range args {
+		params[v.Ordinal] = fmt.Sprintf("%v", v.Value)
+	}
 	stmt := &pb.Statement{
 		Sql:    query,
-		Params: argsToParams(args),
+		Params: nil,
 		CnxId:  c.ID,
 	}
 	pbr, err := c.OGClient.Query(ctx, stmt)
@@ -82,15 +90,4 @@ func (c *SQLiteOGConn) QueryContext(ctx context.Context, query string, args []dr
 		return nil, err
 	}
 	return rowsFromPB(pbr)
-}
-
-func argsToParams(args []driver.NamedValue) []string {
-	if len(args) < 1 {
-		return nil
-	}
-	params := make([]string, len(args))
-	for _, v := range args {
-		params[v.Ordinal-1] = fmt.Sprintf("%v", v.Value)
-	}
-	return params
 }

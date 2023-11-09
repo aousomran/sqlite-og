@@ -4,28 +4,42 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	pb "github.com/aousomran/sqlite-og/gen/proto"
-	"github.com/aousomran/sqlite-og/internal/connections"
-	"github.com/aousomran/sqlite-og/internal/server"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"time"
+
 	"golang.org/x/exp/slog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"log"
-	"net"
-	"sort"
-	"time"
+	_ "net/http/pprof"
+
+	pb "github.com/aousomran/sqlite-og/gen/proto"
+	"github.com/aousomran/sqlite-og/internal/connections"
+	"github.com/aousomran/sqlite-og/internal/server"
 )
 
 var (
-	port = flag.Int("port", 50051, "The server port")
+	port             = flag.Int("port", 50051, "The server port")
+	statsInterval    = flag.Duration("stats-interval", 0*time.Second, "interval in seconds for logging stats, use 0s to disable (default 0s)")
+	logLevel         = flag.String("log-level", "info", "minimum log level to print out, choices (debug,info,warn,error) ")
+	logFormat        = flag.String("log-format", "text", "log format choices (text,json)")
+	pprofEnabled     = flag.Bool("enable-pprof", false, "enabled pprof at localhost:6060")
+	discoveryEnabled = flag.Bool("enable-discovery", true, "enables grpc service discovery")
 )
 
 func loggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-	log.Printf("\n\nRequest: %+v \n\n", req)
+
+	//log.Printf("\n\nRequest: %+v \n\n", req)
+	slog.InfoCtx(ctx, "request received", "method", info.FullMethod)
 	defer func() {
-		log.Printf("\n\nResponse: %+v \n\n", resp)
+		//log.Printf("\n\nResponse: %+v \n\n", resp)
+		slog.InfoCtx(ctx, "sent response")
 		if err != nil {
-			log.Printf("\n\nError: %+v \n\n", err)
+			slog.ErrorCtx(ctx, "error", "reason", err)
 		}
 	}()
 
@@ -44,8 +58,13 @@ func loggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnarySe
 //	}
 //}
 
-func connectionStats(manager *connections.Manager) {
-	ticker := time.NewTicker(2 * time.Second).C
+func connectionStats(manager *connections.Manager, duration time.Duration) {
+	// do not log connection stats
+	if duration < 1*time.Second {
+		slog.Info("connection stats disabled")
+		return
+	}
+	ticker := time.NewTicker(duration).C
 	for {
 		select {
 		case <-ticker:
@@ -59,8 +78,46 @@ func connectionStats(manager *connections.Manager) {
 	}
 }
 
+func initLogger(level, format string) {
+	l := slog.Default()
+	loggerOpts := &slog.HandlerOptions{
+		AddSource: false,
+		Level:     slog.LevelInfo,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	}
+	switch strings.ToLower(level) {
+	case "debug":
+		loggerOpts.Level = slog.LevelDebug
+	case "warn":
+		loggerOpts.Level = slog.LevelWarn
+	case "error":
+		loggerOpts.Level = slog.LevelError
+	default:
+		log.Printf("unknown log level %s, using default level info", level)
+	}
+	if format == "json" {
+		l = slog.New(slog.NewJSONHandler(os.Stdout, loggerOpts))
+	} else {
+		l = slog.New(slog.NewTextHandler(os.Stdout, loggerOpts))
+	}
+	slog.SetDefault(l)
+}
+
 func main() {
 	flag.Parse()
+	initLogger(*logLevel, *logFormat)
+
+	// profiler
+	if *pprofEnabled {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
 	if err != nil {
@@ -71,10 +128,12 @@ func main() {
 		grpc.UnaryInterceptor(loggingInterceptor),
 	)
 
-	reflection.Register(s)
+	if *discoveryEnabled {
+		reflection.Register(s)
+	}
 
 	manager := connections.NewManager()
-	go connectionStats(manager)
+	go connectionStats(manager, *statsInterval)
 	srv := server.New(manager)
 	pb.RegisterSqliteOGServer(s, srv)
 	slog.Info("server listening ", "addr", listener.Addr())

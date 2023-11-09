@@ -1,31 +1,29 @@
 syntax = "proto3";
 
-option go_package = "gitlab.com/aous.omr/sqlite-og";
+option go_package = "github.com/aousomran/sqlite-og";
 
 service SqliteOG {
   rpc Query(Statement) returns (QueryResult){}
   rpc Execute(Statement) returns (ExecuteResult){}
-  rpc ExecuteQuery(Statement) returns (ExecuteQueryResult){}
-  rpc CreateSQLiteFunction(Signature) returns (CreateFunctionResult){}
+  rpc ExecuteOrQuery(Statement) returns (ExecuteOrQueryResult){}
   rpc Callback(stream InvocationResult) returns (stream Invoke){}
-  rpc Connection(ConnectionRequest) returns (ConnectionResponse){}
-  rpc Close(CloseRequest) returns(Empty){}
+  rpc Connection(ConnectionRequest) returns (ConnectionId){}
+  rpc Close(ConnectionId) returns(Empty){}
+  rpc IsValid(ConnectionId) returns(Empty){}
+  rpc Ping(Empty) returns(Empty){}
+  rpc ResetSession(ConnectionId) returns(ConnectionId){}
 }
 
 message Empty{}
 
-message CloseRequest {
-  string connection_id = 1;
+message ConnectionId {
+  string id = 1;
 }
 
 message ConnectionRequest {
   string db_name = 1;
   repeated string functions = 2;
   repeated string aggregators = 3;
-}
-
-message ConnectionResponse {
-  string connection_id = 1;
 }
 
 message InvocationResult {
@@ -38,11 +36,9 @@ message Invoke {
   repeated string args = 2;
 }
 
-message ExecuteQueryResult {
-  repeated string columns = 1;
-  repeated Row rows = 2;
-  int64 lastInsertId = 3;
-  int64 affectedRows = 4;
+message ExecuteOrQueryResult {
+  QueryResult query_result = 1;
+  ExecuteResult execute_result = 2;
 }
 
 message Statement {
@@ -56,22 +52,23 @@ message Row {
 }
 
 message QueryResult {
-  bool success = 1;
-  repeated string columns = 2;
+  repeated string columns = 1;
+  repeated string columnTypes = 2;
   repeated Row rows = 3;
 }
 
 message ExecuteResult {
-  bool success = 1;
-  int64 lastInsertId = 2;
-  int64 affectedRows = 3;
+  int64 lastInsertId = 1;
+  int64 affectedRows = 2;
 }
 
-message Signature {
-  string name = 1;
-  int32 num_params = 2;
-}
-
-message CreateFunctionResult {
-  bool ok = 1;
-}
+//message Parameter {
+//  oneof value {
+//    sint64 i = 1;
+//    double d = 2;
+//    bool b = 3;
+//    bytes y = 4;
+//    string s = 5;
+//  }
+//  string name = 6;
+//}

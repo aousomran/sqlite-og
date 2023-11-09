@@ -23,15 +23,22 @@ type Rows []RowFields
 
 type callbackFunction func(args ...string) string
 
+func datetimeTrunc(args ...string) string {
+	if len(args) < 2 {
+		return ""
+	}
+	return strings.Split(args[1], " ")[0] + " 00:00:00"
+}
+
 func makeCallbackFunc(functionName string, channels *cbchannels.CallbackChannels) callbackFunction {
 	return func(args ...string) string {
-		slog.Info("got invocation from DB", "func_name", functionName, "args", args)
+		slog.Debug("got invocation from DB", "func_name", functionName, "args", args)
 		channels.ChanSend <- &pb.Invoke{
 			FunctionName: functionName,
 			Args:         args,
 		}
 		result := <-channels.ChanReceive
-		slog.Info("received result sending back to DB", "result", result.GetResult())
+		slog.Debug("received result sending back to DB", "result", result.GetResult())
 		if len(result.GetResult()) < 1 {
 			return ""
 		}
@@ -43,10 +50,14 @@ func registerDriver(driverName string, functions []string, channels *cbchannels.
 	sql.Register(driverName, &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
 			for _, name := range functions {
-				slog.Info("registering", "functions", functions)
+				slog.Debug("registering functions", "names", functions)
 				err := conn.RegisterFunc(name, makeCallbackFunc(name, channels), true)
 				if err != nil {
 					slog.Error("unable to register function", "name", name, "error", err.Error())
+					return err
+				}
+				err = conn.RegisterFunc("dt_trunc", datetimeTrunc, true)
+				if err != nil {
 					return err
 				}
 			}
@@ -78,9 +89,10 @@ type DBWrapper struct {
 }
 
 func New(dbname, id string, functions []string, channels *cbchannels.CallbackChannels) *DBWrapper {
+	// TODO: pass context to this function
 	dbname = normalizeDBName(dbname)
 	registerDriver(id, functions, channels)
-	slog.Info("drivers available", "registered", sql.Drivers())
+	slog.Info("registered drivers", "names", sql.Drivers())
 	return &DBWrapper{
 		Name:     dbname,
 		Channels: channels,
@@ -110,13 +122,14 @@ func (w *DBWrapper) Close() error {
 	return nil
 }
 
-func (w *DBWrapper) Query(ctx context.Context, sql string, params ...interface{}) ([]string, []*pb.Row, error) {
+func (w *DBWrapper) Query(ctx context.Context, sql string, params ...interface{}) ([]string, []string, []*pb.Row, error) {
 	if w.Database == nil {
-		return nil, nil, fmt.Errorf("connection is closed")
+		return nil, nil, nil, fmt.Errorf("connection is closed")
 	}
+
 	rows, err := w.Database.QueryContext(ctx, sql, params...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	defer func() {
@@ -128,7 +141,17 @@ func (w *DBWrapper) Query(ctx context.Context, sql string, params ...interface{}
 
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	colTypes2 := make([]string, len(colTypes))
+	for k, v := range colTypes {
+		colTypes2[k] = v.DatabaseTypeName()
 	}
 
 	pbRows := make([]*pb.Row, 0)
@@ -136,12 +159,32 @@ func (w *DBWrapper) Query(ctx context.Context, sql string, params ...interface{}
 		r, err := rowToStringSlice(cols, rows)
 		if err != nil {
 			slog.ErrorCtx(ctx, "unable to fetch next row", "error", err)
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		pbRows = append(pbRows, &pb.Row{Fields: r})
 	}
 
-	return cols, pbRows, nil
+	return cols, colTypes2, pbRows, nil
+}
+
+func (w *DBWrapper) Execute(ctx context.Context, sql string, params ...interface{}) (insertId int64, affected int64, err error) {
+	if w.Database == nil {
+		err = fmt.Errorf("connection is closed")
+		return
+	}
+
+	result, err := w.Database.ExecContext(ctx, sql, params...)
+	if err != nil {
+		return
+	}
+
+	insertId, err = result.LastInsertId()
+	if err != nil {
+		return
+	}
+
+	affected, err = result.RowsAffected()
+	return
 }
 
 func rowToStringSlice(columnNames []string, rows *sql.Rows) ([]string, error) {

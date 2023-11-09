@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
-	pb "github.com/aousomran/sqlite-og/gen/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -13,6 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	pb "github.com/aousomran/sqlite-og/gen/proto"
+
+	_ "github.com/aousomran/sqlite-og/pkg/driver"
 )
 
 func djangoDatetimeTrunc(args ...string) string {
@@ -45,7 +50,7 @@ var (
 
 func query(ctx context.Context, client pb.SqliteOGClient, cnxId string, sql string, params []string) {
 	log.Println("starting query")
-	Res, err := client.ExecuteQuery(ctx, &pb.Statement{
+	Res, err := client.ExecuteOrQuery(ctx, &pb.Statement{
 		CnxId:  cnxId,
 		Sql:    sql,
 		Params: params,
@@ -53,9 +58,9 @@ func query(ctx context.Context, client pb.SqliteOGClient, cnxId string, sql stri
 	if err != nil {
 		log.Fatalf("cannot execute query %v", err)
 	}
-	log.Println(strings.Join(Res.Columns, "\t\t"))
+	log.Println(strings.Join(Res.QueryResult.Columns, "\t\t"))
 	log.Println(strings.Repeat("--", 40))
-	for _, v := range Res.Rows {
+	for _, v := range Res.QueryResult.Rows {
 		log.Println(fmt.Sprintf(strings.Join(v.Fields, "\t\t")))
 	}
 }
@@ -119,8 +124,45 @@ func doCallbackDance(ctx context.Context, client pb.SqliteOGClient) *sync.WaitGr
 	return &wg
 }
 
-func main() {
+type channelModel struct {
+	id      int
+	title   string
+	created time.Time
+}
 
+func main() {
+	db, err := sql.Open("sqliteog", "localhost:50051/test")
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Printf("unable to close DB: %s", err.Error())
+		}
+	}(db)
+
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+	//var f float64
+	rows, err := db.Query("select id,title,published_at from app_channel limit 1")
+	//rows, err := db.Query("select 1.1")
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+
+	for rows.Next() {
+		dst := &channelModel{}
+		err := rows.Scan(&dst.id, &dst.title, &dst.created)
+		//err := rows.Scan(&f)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+
+		fmt.Printf("id: %T | %d, title: %T | %s, created: %T, %s", dst.id, dst.id, dst.title, dst.title, dst.created, dst.created.String())
+		//fmt.Printf("f: %T %f", f, f)
+	}
+}
+
+func callbacksMain() {
 	//ctx, cancel := context.WithCancel(context.Background())
 	ctx := context.Background()
 	sigChan := make(chan os.Signal, 1)
@@ -154,8 +196,8 @@ func main() {
 		log.Fatalf("cannot create database connection %s\n", err.Error())
 	}
 
-	log.Printf("got cnx id %s", cnx.GetConnectionId())
-	ctx = metadata.AppendToOutgoingContext(ctx, "cnx_id", cnx.GetConnectionId())
+	log.Printf("got cnx id %s", cnx.GetId())
+	ctx = metadata.AppendToOutgoingContext(ctx, "cnx_id", cnx.GetId())
 
 	_ = doCallbackDance(ctx, client)
 
@@ -163,7 +205,7 @@ func main() {
 	params := []string{"day", "UTC", "UTC"}
 	//sql := `SELECT * from app_channel limit 10`
 	//params := []string{}
-	query(ctx, client, cnx.GetConnectionId(), sql, params)
+	query(ctx, client, cnx.GetId(), sql, params)
 
 	//sql := `SELECT DISTINCT django_datetime_trunc(?, "app_channelstats"."date", ?, ?) AS "scrape_date" FROM "app_channelstats" ORDER BY "scrape_date" DESC LIMIT 10`
 	////sql := `SELECT id, django_datetime_trunc(?, "app_channelstats"."date", ?, ?) AS "scrape_date" FROM "app_channelstats" ORDER BY "scrape_date" DESC LIMIT 3`
@@ -181,39 +223,3 @@ func main() {
 	//log.Printf("Received: %d\t\t Sent: %d\n", msgsReceived, msgsSent)
 	//log.Println("client: bye!")
 }
-
-//func main() {
-//	ctx, cancel := context.WithCancel(context.Background())
-//
-//	sigChan := make(chan os.Signal)
-//	signal.Notify(sigChan)
-//	go func() {
-//		for {
-//			log.Println("waiting for signal")
-//			select {
-//			case sig := <-sigChan:
-//				log.Printf("got signal %+v", sig)
-//				cancel()
-//				break
-//			}
-//			break
-//		}
-//	}()
-//
-//	wg := sync.WaitGroup{}
-//	for i := 0; i < 10; i++ {
-//		wg.Add(1)
-//		go func() {
-//			num := rand.Int()
-//			select {
-//			case <-ctx.Done():
-//				log.Printf("done from routine %d", num)
-//				wg.Done()
-//				break
-//			}
-//
-//		}()
-//	}
-//	wg.Wait()
-//	log.Println("client bye!")
-//}
