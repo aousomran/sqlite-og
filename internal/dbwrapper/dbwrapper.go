@@ -4,14 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/aousomran/sqlite-og/internal/cbchannels"
 	"github.com/mattn/go-sqlite3"
-	"gitlab.com/aous.omr/sqlite-og/internal/cbchannels"
 	"golang.org/x/exp/slog"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 
-	pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 )
 
 const DefaultDBName = "test"

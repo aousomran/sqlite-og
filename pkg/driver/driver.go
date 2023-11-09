@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 )
 
 func init() {

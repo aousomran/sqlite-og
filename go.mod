@@ -1,4 +1,4 @@
-module gitlab.com/aous.omr/sqlite-og
+module github.com/aousomran/sqlite-og
 
 go 1.20
 

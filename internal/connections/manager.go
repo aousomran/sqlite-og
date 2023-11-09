@@ -2,9 +2,9 @@ package connections
 
 import (
 	"fmt"
+	"github.com/aousomran/sqlite-og/internal/cbchannels"
+	"github.com/aousomran/sqlite-og/internal/dbwrapper"
 	"github.com/google/uuid"
-	"gitlab.com/aous.omr/sqlite-og/internal/cbchannels"
-	"gitlab.com/aous.omr/sqlite-og/internal/dbwrapper"
 	"golang.org/x/exp/slog"
 	"strings"
 	"sync"

@@ -1,6 +1,6 @@
 package cbchannels
 
-import pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+import pb "github.com/aousomran/sqlite-og/gen/proto"
 
 type CallbackChannels struct {
 	ChanSend    chan *pb.Invoke

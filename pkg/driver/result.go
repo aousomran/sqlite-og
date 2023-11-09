@@ -2,7 +2,7 @@ package driver
 
 import (
 	"fmt"
-	pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 )
 
 type Result struct {

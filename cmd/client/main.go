@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"

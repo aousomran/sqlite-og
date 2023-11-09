@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 )
 
 type Rows struct {

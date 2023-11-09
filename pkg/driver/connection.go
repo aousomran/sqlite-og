@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	pb "gitlab.com/aous.omr/sqlite-og/gen/proto"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 	"google.golang.org/grpc"
 )
 
