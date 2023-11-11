@@ -2,7 +2,7 @@ package connections
 
 import (
 	"fmt"
-	"github.com/aousomran/sqlite-og/internal/cbchannels"
+	"github.com/aousomran/sqlite-og/internal/callback"
 	"github.com/aousomran/sqlite-og/internal/dbwrapper"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
@@ -53,7 +53,7 @@ func (m *Manager) DeleteConnection(id string) {
 
 func (m *Manager) Connect(dbname string, functions []string, aggregators []string) (string, error) {
 	id := strings.Split(uuid.New().String(), "-")[0]
-	channels := cbchannels.New()
+	channels := callback.New()
 	cnx := dbwrapper.New(dbname, id, functions, channels)
 	err := cnx.Open(id)
 	if err != nil {

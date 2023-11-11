@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/aousomran/sqlite-og/internal/cbchannels"
+	"github.com/aousomran/sqlite-og/internal/callback"
 	"github.com/mattn/go-sqlite3"
 	"golang.org/x/exp/slog"
 	"strings"
@@ -30,7 +30,7 @@ func datetimeTrunc(args ...string) string {
 	return strings.Split(args[1], " ")[0] + " 00:00:00"
 }
 
-func makeCallbackFunc(functionName string, channels *cbchannels.CallbackChannels) callbackFunction {
+func makeCallbackFunc(functionName string, channels *callback.CallbackChannels) callbackFunction {
 	return func(args ...string) string {
 		slog.Debug("got invocation from DB", "func_name", functionName, "args", args)
 		channels.ChanSend <- &pb.Invoke{
@@ -46,7 +46,7 @@ func makeCallbackFunc(functionName string, channels *cbchannels.CallbackChannels
 	}
 }
 
-func registerDriver(driverName string, functions []string, channels *cbchannels.CallbackChannels) {
+func registerDriver(driverName string, functions []string, channels *callback.CallbackChannels) {
 	sql.Register(driverName, &sqlite3.SQLiteDriver{
 		ConnectHook: func(conn *sqlite3.SQLiteConn) error {
 			for _, name := range functions {
@@ -85,10 +85,10 @@ func normalizeDBName(name string) string {
 type DBWrapper struct {
 	Name     string
 	Database *sql.DB
-	Channels *cbchannels.CallbackChannels
+	Channels *callback.CallbackChannels
 }
 
-func New(dbname, id string, functions []string, channels *cbchannels.CallbackChannels) *DBWrapper {
+func New(dbname, id string, functions []string, channels *callback.CallbackChannels) *DBWrapper {
 	// TODO: pass context to this function
 	dbname = normalizeDBName(dbname)
 	registerDriver(id, functions, channels)

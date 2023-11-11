@@ -63,7 +63,7 @@ func (s *Server) ExecuteOrQuery(ctx context.Context, in *pb.Statement) (*pb.Exec
 
 	// this is a DML operation, we'll call execute & fill ExecuteResult
 	if sqlparser.IsDML(in.GetSql()) {
-		slog.InfoCtx(ctx, "executing", "isDML", true, "sql", fmt.Sprintf("%s", in.GetSql()), "params", fmt.Sprintf("%+v", in.GetParams()))
+		slog.InfoContext(ctx, "executing", "isDML", true, "sql", fmt.Sprintf("%s", in.GetSql()), "params", fmt.Sprintf("%+v", in.GetParams()))
 		execute, err := s.Execute(ctx, in)
 		if err != nil {
 			return nil, err
@@ -72,7 +72,7 @@ func (s *Server) ExecuteOrQuery(ctx context.Context, in *pb.Statement) (*pb.Exec
 		result.ExecuteResult.AffectedRows = execute.GetAffectedRows()
 
 	} else {
-		slog.InfoCtx(ctx, "querying", "isDML", false, "sql", fmt.Sprintf("%s", in.GetSql()), "params", fmt.Sprintf("%+v", in.GetParams()))
+		slog.InfoContext(ctx, "querying", "isDML", false, "sql", fmt.Sprintf("%s", in.GetSql()), "params", fmt.Sprintf("%+v", in.GetParams()))
 		query, err := s.Query(ctx, in)
 		if err != nil {
 			return nil, err
@@ -102,7 +102,7 @@ func (s *Server) Callback(cbs pb.SqliteOG_CallbackServer) error {
 		slog.Error(mdErr.Error(), "want", 1, "got", len(cnxIdSlice))
 		return mdErr
 	}
-	slog.InfoCtx(ctx, "got connection id", "cnx_id", cnxIdSlice[0])
+	slog.InfoContext(ctx, "got connection id", "cnx_id", cnxIdSlice[0])
 	db, err := s.Manager.GetConnection(cnxIdSlice[0])
 	if err != nil {
 		slog.Error("cannot get database from manager", "error", err)

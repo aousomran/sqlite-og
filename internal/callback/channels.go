@@ -1,4 +1,4 @@
-package cbchannels
+package callback
 
 import pb "github.com/aousomran/sqlite-og/gen/proto"
 
