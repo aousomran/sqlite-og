@@ -42,7 +42,7 @@ func (r *Rows) Close() error {
 func (r *Rows) Next(dest []driver.Value) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// if we've reached the end of the result set return io.EOF
+	// if we've reached the end of the result set, return io.EOF
 	if r.index == len(r.pbr.GetRows()) {
 		return io.EOF
 	}

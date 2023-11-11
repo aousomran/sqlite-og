@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,6 +18,9 @@ type SQLiteOGConn struct {
 }
 
 func (c *SQLiteOGConn) Prepare(query string) (driver.Stmt, error) {
+	if query == "" {
+		return nil, errors.New("query is empty")
+	}
 	return &SQLiteOGStmt{
 		c:        c,
 		sql:      query,
@@ -59,13 +63,13 @@ func (c *SQLiteOGConn) IsValid() bool {
 }
 
 func (c *SQLiteOGConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
-	params := make([]string, len(args))
-	for _, v := range args {
-		params[v.Ordinal] = fmt.Sprintf("%v", v.Value)
+	params, err := namedValuesToParams(args)
+	if err != nil {
+		return nil, err
 	}
 	stmt := &pb.Statement{
 		Sql:    query,
-		Params: nil,
+		Params: params,
 		CnxId:  c.ID,
 	}
 	pbr, err := c.OGClient.Execute(ctx, stmt)
@@ -76,13 +80,13 @@ func (c *SQLiteOGConn) ExecContext(ctx context.Context, query string, args []dri
 }
 
 func (c *SQLiteOGConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
-	params := make([]string, len(args))
-	for _, v := range args {
-		params[v.Ordinal] = fmt.Sprintf("%v", v.Value)
+	params, err := namedValuesToParams(args)
+	if err != nil {
+		return nil, err
 	}
 	stmt := &pb.Statement{
 		Sql:    query,
-		Params: nil,
+		Params: params,
 		CnxId:  c.ID,
 	}
 	pbr, err := c.OGClient.Query(ctx, stmt)
@@ -90,4 +94,16 @@ func (c *SQLiteOGConn) QueryContext(ctx context.Context, query string, args []dr
 		return nil, err
 	}
 	return rowsFromPB(pbr)
+}
+
+func namedValuesToParams(namedValues []driver.NamedValue) ([]string, error) {
+	// TODO: ignoring the "Name" now, this should be reviewed (see definition of driver.NamedValue)
+	params := make([]string, len(namedValues))
+	for _, v := range namedValues {
+		if v.Ordinal < 1 {
+			return nil, fmt.Errorf("ordinal cannot be < 1 %s %v", v.Name, v.Value)
+		}
+		params[v.Ordinal-1] = fmt.Sprintf("%v", v.Value)
+	}
+	return params, nil
 }
