@@ -26,3 +26,15 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+
+      # Install gotestfmt on the VM running the action.
+    - name: Set up gotestfmt
+      uses: GoTestTools/gotestfmt-action@v2
+      with:
+        version: v2.0.0
+
+      # Run tests with nice formatting. Save the original log in /tmp/gotest.log
+    - name: Run tests
+      run: |
+        set -euo pipefail
+        go test -json -v ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
