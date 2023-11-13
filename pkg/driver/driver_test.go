@@ -3,19 +3,18 @@ package driver
 import (
 	"database/sql"
 	"fmt"
-	pb "github.com/aousomran/sqlite-og/gen/proto"
-	"github.com/aousomran/sqlite-og/internal/connections"
-	"github.com/aousomran/sqlite-og/internal/server"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"log"
 	"math/rand"
 	"net"
 	"os"
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
+	"github.com/aousomran/sqlite-og/internal/connections"
+	"github.com/aousomran/sqlite-og/internal/server"
 )
 
 type Student struct {
@@ -31,6 +30,10 @@ type Student struct {
 const databaseName = "tester.db"
 
 var Listener net.Listener = nil
+var sqliteDB *sql.DB
+var ogDB *sql.DB
+var grpcServer *grpc.Server
+var connectionManager *connections.Manager
 
 func insertRandomData(db *sql.DB, numRows int) error {
 	// Seed the random number generator
@@ -64,80 +67,8 @@ func insertRandomData(db *sql.DB, numRows int) error {
 	return nil
 }
 
-func setupSuite(t *testing.T) func(t *testing.T) {
-	db, err := sql.Open("sqlite3", databaseName)
-	defer func() {
-		_ = db.Close()
-	}()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create the example_table
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS example_table (
-			id INTEGER PRIMARY KEY,
-			name TEXT,
-			age INTEGER,
-			height REAL,
-			is_student INTEGER,
-			birth_date DATE,
-			registration_time TIMESTAMP
-		);
-	`)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Insert random data into the example_table for testing
-	err = insertRandomData(db, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Log("database setup for testing completed.")
-
-	// setup listener & grpc server
-	Listener, err = net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
-	if Listener == nil {
-		t.Fatal("could not create listener")
-	}
-	t.Logf("listener started, address %v", Listener.Addr().String())
-
-	s := grpc.NewServer()
-
-	manager := connections.NewManager()
-	srv := server.New(manager)
-	pb.RegisterSqliteOGServer(s, srv)
-
-	go func() {
-		err = s.Serve(Listener)
-		if err != nil {
-			t.Errorf("grpc serve error %v", err)
-			return
-		}
-		t.Logf("grpc server listening on %s", Listener.Addr().String())
-	}()
-
-	// return teardown function
-	return func(t *testing.T) {
-		_ = manager.Close()
-		s.GracefulStop()
-		_ = Listener.Close()
-		errRemove := os.Remove(fmt.Sprintf("%s", databaseName))
-		if errRemove != nil {
-			t.Logf("error removing datafile %s", errRemove)
-		}
-	}
-}
-
-func queryStudents(db *sql.DB) ([]Student, error) {
-	query := `SELECT * FROM example_table LIMIT 10`
-
-	rows, err := db.Query(query)
+func queryStudents(db *sql.DB, sql string) ([]Student, error) {
+	rows, err := db.Query(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -160,25 +91,157 @@ func queryStudents(db *sql.DB) ([]Student, error) {
 	return result, nil
 }
 
-func TestQuery(t *testing.T) {
-	teardown := setupSuite(t)
-	defer teardown(t)
-
-	db, err := sql.Open("sqlite3", databaseName)
+func setupDBConnections(t *testing.T) {
+	db1, err := sql.Open("sqlite3", databaseName)
 	if err != nil {
-		log.Fatal(err)
+		t.Fatalf("unable to open sqlite3 connection %v", err)
 	}
-	defer db.Close()
-
-	students, err := queryStudents(db)
-	require.NoError(t, err)
-	require.NotNil(t, students)
+	sqliteDB = db1
 
 	dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
 	db2, err := sql.Open("sqliteog", dsn)
-	defer db2.Close()
+	if err != nil {
+		t.Fatalf("unable to open sqliteog connection %v", err)
+	}
+	ogDB = db2
+}
 
-	students2, err2 := queryStudents(db2)
-	require.NoError(t, err2)
-	require.NotNil(t, students2)
+func setupGRPCServer(t *testing.T) {
+	// setup listener
+	var err error
+	Listener, err = net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	if Listener == nil {
+		t.Fatal("could not create listener")
+	}
+
+	//  setup grpc server
+	grpcServer = grpc.NewServer()
+
+	connectionManager = connections.NewManager()
+	ogServer := server.New(connectionManager)
+	pb.RegisterSqliteOGServer(grpcServer, ogServer)
+
+	go func() {
+		errServe := grpcServer.Serve(Listener)
+		if errServe != nil {
+			t.Errorf("grpc serve error %v", errServe)
+			return
+		}
+		t.Logf("grpc server listening on %s", Listener.Addr().String())
+	}()
+	return
+}
+
+func setupDatabase(t *testing.T) {
+	// Create the example_table
+	_, err := sqliteDB.Exec(`
+		CREATE TABLE IF NOT EXISTS example_table (
+			id INTEGER PRIMARY KEY,
+			name TEXT,
+			age INTEGER,
+			height REAL,
+			is_student INTEGER,
+			birth_date DATE,
+			registration_time TIMESTAMP
+		);
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert random data into the example_table for testing
+	err = insertRandomData(sqliteDB, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func setupSuite(t *testing.T) func(t *testing.T) {
+	// setup globals to be used in tests
+	setupGRPCServer(t)
+	setupDBConnections(t)
+	setupDatabase(t)
+
+	// return teardown function
+	return func(t *testing.T) {
+		_ = sqliteDB.Close()
+		_ = ogDB.Close()
+		_ = connectionManager.Close()
+		grpcServer.GracefulStop()
+		_ = Listener.Close()
+		_ = os.Remove(fmt.Sprintf("%s", databaseName))
+	}
+}
+
+func TestCRUD(t *testing.T) {
+	teardown := setupSuite(t)
+	defer teardown(t)
+
+	t.Run("selected records are equal", func(t *testing.T) {
+		query := `SELECT * FROM example_table LIMIT 10`
+		expected, err := queryStudents(sqliteDB, query)
+		actual, err2 := queryStudents(ogDB, query)
+
+		require.NoError(t, err)
+		require.NoError(t, err2)
+		require.NotNil(t, expected)
+		require.NotNil(t, actual)
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("insert works", func(t *testing.T) {
+		query := `SELECT * FROM example_table ORDER BY id DESC LIMIT 1`
+		before, err := queryStudents(sqliteDB, query)
+		require.NoError(t, err)
+
+		err = insertRandomData(ogDB, 1)
+		require.NoError(t, err)
+
+		after, err := queryStudents(sqliteDB, query)
+		require.NoError(t, err)
+
+		require.NotEqual(t, before, after)
+		require.Greater(t, after[0].ID, before[0].ID)
+	})
+
+	t.Run("update works", func(t *testing.T) {
+		query := `SELECT * FROM example_table ORDER BY id DESC LIMIT 1`
+		before, err := queryStudents(sqliteDB, query)
+		require.NoError(t, err)
+
+		name := "ao"
+		updateResult, err := ogDB.Exec(`UPDATE example_table SET name=? WHERE id=?`, name, before[0].ID)
+		require.NoError(t, err)
+		affected, err := updateResult.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, 1, int(affected))
+
+		after, err := queryStudents(sqliteDB, query)
+		require.NoError(t, err)
+
+		require.NotEqual(t, before[0].Name, after[0].Name)
+		require.Equal(t, name, after[0].Name)
+	})
+
+	t.Run("delete works", func(t *testing.T) {
+		query := `SELECT * FROM example_table ORDER BY id DESC LIMIT 1`
+		before, err := queryStudents(ogDB, query)
+		require.NoError(t, err)
+
+		deleteResult, err := ogDB.Exec("delete from example_table where id=?", fmt.Sprintf("%d", before[0].ID))
+		require.NoError(t, err)
+		affected, err := deleteResult.RowsAffected()
+		require.NoError(t, err)
+		require.Equal(t, 1, int(affected))
+
+		after, err := queryStudents(sqliteDB, query)
+		require.NoError(t, err)
+
+		require.NotEqual(t, before, after)
+		require.Less(t, after[0].ID, before[0].ID)
+	})
+
 }
