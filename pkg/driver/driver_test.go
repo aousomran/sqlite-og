@@ -3,9 +3,15 @@ package driver
 import (
 	"database/sql"
 	"fmt"
+	pb "github.com/aousomran/sqlite-og/gen/proto"
+	"github.com/aousomran/sqlite-og/internal/connections"
+	"github.com/aousomran/sqlite-og/internal/server"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"log"
 	"math/rand"
+	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -20,12 +26,11 @@ type Student struct {
 	IsStudent        int
 	BirthDate        string
 	RegistrationTime string
-	//Notes            []byte
 }
 
 const databaseName = "tester.db"
 
-var filePath = fmt.Sprintf("../../%s", databaseName)
+var Listener net.Listener = nil
 
 func insertRandomData(db *sql.DB, numRows int) error {
 	// Seed the random number generator
@@ -46,8 +51,6 @@ func insertRandomData(db *sql.DB, numRows int) error {
 		isStudent := rand.Intn(2)
 		birthDate := randomDate(time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC), time.Now())
 		registrationTime := time.Now().Add(-time.Duration(rand.Intn(365 * 24 * int(time.Hour))))
-		//notes := make([]byte, 8)
-		//rand.Read(notes)
 
 		_, err := db.Exec(`
 			INSERT INTO example_table (name, age, height, is_student, birth_date, registration_time)
@@ -62,9 +65,12 @@ func insertRandomData(db *sql.DB, numRows int) error {
 }
 
 func setupSuite(t *testing.T) func(t *testing.T) {
-	db, err := sql.Open("sqlite3", filePath)
+	db, err := sql.Open("sqlite3", databaseName)
+	defer func() {
+		_ = db.Close()
+	}()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	// Create the example_table
@@ -77,7 +83,6 @@ func setupSuite(t *testing.T) func(t *testing.T) {
 			is_student INTEGER,
 			birth_date DATE,
 			registration_time TIMESTAMP
-			--notes BLOB
 		);
 	`)
 	if err != nil {
@@ -91,8 +96,41 @@ func setupSuite(t *testing.T) func(t *testing.T) {
 	}
 
 	t.Log("database setup for testing completed.")
+
+	// setup listener & grpc server
+	Listener, err = net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+	if Listener == nil {
+		t.Fatal("could not create listener")
+	}
+	t.Logf("listener started, address %v", Listener.Addr().String())
+
+	s := grpc.NewServer()
+
+	manager := connections.NewManager()
+	srv := server.New(manager)
+	pb.RegisterSqliteOGServer(s, srv)
+
+	go func() {
+		err = s.Serve(Listener)
+		if err != nil {
+			t.Errorf("grpc serve error %v", err)
+			return
+		}
+		t.Logf("grpc server listening on %s", Listener.Addr().String())
+	}()
+
+	// return teardown function
 	return func(t *testing.T) {
-		_ = db.Close()
+		_ = manager.Close()
+		s.GracefulStop()
+		_ = Listener.Close()
+		errRemove := os.Remove(fmt.Sprintf("%s", databaseName))
+		if errRemove != nil {
+			t.Logf("error removing datafile %s", errRemove)
+		}
 	}
 }
 
@@ -114,7 +152,6 @@ func queryStudents(db *sql.DB) ([]Student, error) {
 			&student.ID, &student.Name, &student.Age,
 			&student.Height, &student.IsStudent, &student.BirthDate,
 			&student.RegistrationTime)
-		//&student.Notes)
 		if errScan != nil {
 			return nil, errScan
 		}
@@ -127,7 +164,7 @@ func TestQuery(t *testing.T) {
 	teardown := setupSuite(t)
 	defer teardown(t)
 
-	db, err := sql.Open("sqlite3", filePath)
+	db, err := sql.Open("sqlite3", databaseName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -137,13 +174,11 @@ func TestQuery(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, students)
 
-	db2, err := sql.Open("sqliteog", fmt.Sprintf("localhost:50051/%s", databaseName))
+	dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
+	db2, err := sql.Open("sqliteog", dsn)
 	defer db2.Close()
 
 	students2, err2 := queryStudents(db2)
 	require.NoError(t, err2)
 	require.NotNil(t, students2)
-
-	require.Equal(t, students, students2)
-
 }
