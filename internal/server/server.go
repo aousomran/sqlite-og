@@ -174,7 +174,7 @@ func (s *Server) Close(ctx context.Context, in *pb.ConnectionId) (*pb.Empty, err
 	}
 	errClose := connection.Close()
 	if errClose != nil {
-		return nil, fmt.Errorf("unable to close connection %d, error: %s", cnxId, errClose.Error())
+		return nil, fmt.Errorf("unable to close connection %s, error: %s", cnxId, errClose.Error())
 	}
 	s.Manager.DeleteConnection(cnxId)
 	return &pb.Empty{}, nil

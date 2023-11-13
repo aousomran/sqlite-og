@@ -22,10 +22,7 @@ jobs:
         go-version: '1.21'
 
     - name: Build
-      run: go build -v ./...
-
-    - name: Test
-      run: go test -v ./...
+      run: go build -v -o ./bin/server ./cmd/server/main.go
 
       # Install gotestfmt on the VM running the action.
     - name: Set up gotestfmt
