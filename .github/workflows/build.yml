@@ -28,7 +28,7 @@ jobs:
     - name: Set up gotestfmt
       uses: GoTestTools/gotestfmt-action@v2
       with:
-        version: v2.0.0
+        version: v2.5.0
 
       # Run tests with nice formatting. Save the original log in /tmp/gotest.log
     - name: Run tests
