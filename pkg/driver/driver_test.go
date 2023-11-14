@@ -171,7 +171,6 @@ func setupSuite(t *testing.T) func(t *testing.T) {
 		_ = ogDB.Close()
 		_ = connectionManager.Close()
 		grpcServer.GracefulStop()
-		_ = Listener.Close()
 		_ = os.Remove(fmt.Sprintf("%s", databaseName))
 	}
 }
