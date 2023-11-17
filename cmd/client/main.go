@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 	"log"
 	"os"
 	"os/signal"
@@ -15,8 +12,11 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/aousomran/sqlite-og/gen/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
+	pb "github.com/aousomran/sqlite-og/gen/proto"
 	_ "github.com/aousomran/sqlite-og/pkg/driver"
 )
 
@@ -143,7 +143,7 @@ func main() {
 		log.Fatalf(err.Error())
 	}
 	//var f float64
-	rows, err := db.Query("select id,title,published_at from app_channel limit 1")
+	rows, err := db.Query("select 1")
 	//rows, err := db.Query("select 1.1")
 	if err != nil {
 		log.Fatalf(err.Error())

@@ -3,14 +3,15 @@ package driver
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"math/rand"
 	"net"
 	"os"
 	"testing"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	pb "github.com/aousomran/sqlite-og/gen/proto"
 	"github.com/aousomran/sqlite-og/internal/connections"
@@ -94,14 +95,14 @@ func queryStudents(db *sql.DB, sql string) ([]Student, error) {
 func setupDBConnections(t *testing.T) {
 	db1, err := sql.Open("sqlite3", databaseName)
 	if err != nil {
-		t.Fatalf("unable to open sqlite3 connection %v", err)
+		require.NoError(t, err)
 	}
 	sqliteDB = db1
 
 	dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
 	db2, err := sql.Open("sqliteog", dsn)
 	if err != nil {
-		t.Fatalf("unable to open sqliteog connection %v", err)
+		require.NoError(t, err)
 	}
 	ogDB = db2
 }
@@ -243,4 +244,42 @@ func TestCRUD(t *testing.T) {
 		require.Less(t, after[0].ID, before[0].ID)
 	})
 
+	t.Run("test callbacks", func(t *testing.T) {
+		sayHello := func(args ...string) []string {
+			return []string{"hello " + args[0]}
+		}
+
+		sql.Register("og_custom", &SQLiteOGDriver{
+			Funcs: map[string]callbackFunc{
+				"say_hello": sayHello,
+			},
+			CallbacksEnabled: true,
+		})
+
+		dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
+		//dsn := "localhost:50051/tester.db"
+		db, err := sql.Open("og_custom", dsn)
+		defer db.Close()
+
+		rows, err := db.Query(`select say_hello(?)`, "ao")
+		require.NoError(t, err)
+		result := ""
+		for rows.Next() {
+			errScan := rows.Scan(&result)
+			require.NoError(t, errScan)
+		}
+		require.Equal(t, "hello ao", result)
+	})
 }
+
+//func TestSomething(t *testing.T) {
+//	setupGRPCServer(t)
+//	dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
+//	db2, err := sql.Open("sqliteog", dsn)
+//	require.NotNil(t, db2)
+//	require.NoError(t, err)
+//	rows, err := db2.Query("select 1")
+//	t.Logf("%v", rows)
+//	require.NoError(t, err)
+//	require.NotNil(t, rows)
+//}

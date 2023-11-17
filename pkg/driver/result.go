@@ -2,6 +2,7 @@ package driver
 
 import (
 	"fmt"
+
 	pb "github.com/aousomran/sqlite-og/gen/proto"
 )
 
