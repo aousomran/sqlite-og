@@ -110,7 +110,7 @@ func setupDBConnections(t *testing.T) {
 func setupGRPCServer(t *testing.T) {
 	// setup listener
 	var err error
-	Listener, err = net.Listen("tcp", "localhost:0")
+	Listener, err = net.Listen("tcp", "localhost:51515")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -257,9 +257,7 @@ func TestCRUD(t *testing.T) {
 		})
 
 		dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
-		//dsn := "localhost:50051/tester.db"
 		db, err := sql.Open("og_custom", dsn)
-		defer db.Close()
 
 		rows, err := db.Query(`select say_hello(?)`, "ao")
 		require.NoError(t, err)
@@ -269,17 +267,8 @@ func TestCRUD(t *testing.T) {
 			require.NoError(t, errScan)
 		}
 		require.Equal(t, "hello ao", result)
+		err = db.Close()
+		require.NoError(t, err)
+		t.Log("test done")
 	})
 }
-
-//func TestSomething(t *testing.T) {
-//	setupGRPCServer(t)
-//	dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
-//	db2, err := sql.Open("sqliteog", dsn)
-//	require.NotNil(t, db2)
-//	require.NoError(t, err)
-//	rows, err := db2.Query("select 1")
-//	t.Logf("%v", rows)
-//	require.NoError(t, err)
-//	require.NotNil(t, rows)
-//}

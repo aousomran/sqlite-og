@@ -5,20 +5,22 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"log"
 	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	pb "github.com/aousomran/sqlite-og/gen/proto"
 )
 
 type SQLiteOGConn struct {
-	ID       string
-	DBName   string
-	GRPCConn *grpc.ClientConn
-	OGClient pb.SqliteOGClient
-	Funcs    map[string]callbackFunc
+	ID                string
+	DBName            string
+	GRPCConn          *grpc.ClientConn
+	OGClient          pb.SqliteOGClient
+	Funcs             map[string]callbackFunc
+	callbackCanceller context.CancelFunc
 }
 
 func NewConnection(ctx context.Context, dbname string, grpcConn *grpc.ClientConn, callbacksEnabled bool, callbacks map[string]callbackFunc) (*SQLiteOGConn, error) {
@@ -51,40 +53,35 @@ func NewConnection(ctx context.Context, dbname string, grpcConn *grpc.ClientConn
 	}
 
 	if callbacksEnabled {
-		err = cnx.DoCallbackDance(ctx)
-		if err != nil {
-			// attempt to close the connection
-			//_, _ = client.Close(ctx, cnxId)
+		cbCtx, cancel := context.WithCancel(ctx)
+		if err := cnx.DoCallbackDance(cbCtx); err != nil {
+			cancel()
 			return nil, err
 		}
+
+		cnx.callbackCanceller = cancel
 	}
 
 	return cnx, nil
 }
 
 func (c *SQLiteOGConn) DoCallbackDance(ctx context.Context) error {
-	//ctx = metadata.AppendToOutgoingContext(ctx, "cnx_id", c.ID)
-	ctx2 := context.Background()
-	ctx2 = metadata.AppendToOutgoingContext(ctx, "cnx_id", c.ID)
-	callbackClient, err := c.OGClient.Callback(ctx2)
+	ctx = metadata.AppendToOutgoingContext(ctx, "cnx_id", c.ID)
+	callbackClient, err := c.OGClient.Callback(ctx)
 	if err != nil {
-		//log.Fatalf("cannot create callback client %s\n", err.Error())
 		return err
 	}
 
 	receiveChannel := make(chan *pb.Invoke)
-	//c.wg = &sync.WaitGroup{}
 
 	var msgsSent, msgsReceived int
 
-	//c.wg.Add(2)
 	go func() {
 	OUTER:
 		for {
 			select {
-			case <-ctx2.Done():
+			case <-ctx.Done():
 				log.Println("1st go routine received ctx.Done()")
-				//c.wg.Done()
 				break OUTER
 			default:
 				invoke, invErr := callbackClient.Recv()
@@ -101,7 +98,10 @@ func (c *SQLiteOGConn) DoCallbackDance(ctx context.Context) error {
 	OUTER:
 		for {
 			select {
-			case <-ctx2.Done():
+			case <-ctx.Done():
+				if errClose := callbackClient.CloseSend(); errClose != nil {
+					log.Printf("could not close cbClient %v", errClose)
+				}
 				log.Println("2nd go routine received ctx.Done()")
 				break OUTER
 			case invoke := <-receiveChannel:
@@ -138,8 +138,13 @@ func (c *SQLiteOGConn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *SQLiteOGConn) Close() error {
-	_, err := c.OGClient.Close(context.Background(), &pb.ConnectionId{Id: c.ID})
-	return err
+	if c.callbackCanceller != nil {
+		c.callbackCanceller()
+	}
+	if _, err := c.OGClient.Close(context.Background(), &pb.ConnectionId{Id: c.ID}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *SQLiteOGConn) Begin() (driver.Tx, error) {
