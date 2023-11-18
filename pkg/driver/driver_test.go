@@ -254,7 +254,7 @@ func TestCRUD(t *testing.T) {
 			CallbacksEnabled: true,
 		})
 
-		dsn := fmt.Sprintf("%s/%s", "localhost:9090", databaseName)
+		dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
 		db, err := sql.Open("og_custom", dsn)
 
 		rows, err := db.Query(`select say_hello(?)`, "ao")
