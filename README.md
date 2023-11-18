@@ -1,4 +1,5 @@
 # sqlite-og
+![build workflow](https://github.com/github/docs/actions/workflows/main.yml/badge.svg)
 
 ## Overview
 
