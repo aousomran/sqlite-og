@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"sort"
 	"strings"
@@ -15,7 +16,6 @@ import (
 	"golang.org/x/exp/slog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	_ "net/http/pprof"
 
 	pb "github.com/aousomran/sqlite-og/gen/proto"
 	"github.com/aousomran/sqlite-og/internal/connections"
@@ -23,21 +23,21 @@ import (
 )
 
 var (
-	port             = flag.Int("port", 50051, "The server port")
+	port             = flag.Int("port", 9091, "The server port")
 	statsInterval    = flag.Duration("stats-interval", 0*time.Second, "interval in seconds for logging stats, use 0s to disable (default 0s)")
 	logLevel         = flag.String("log-level", "info", "minimum log level to print out, choices (debug,info,warn,error) ")
 	logFormat        = flag.String("log-format", "text", "log format choices (text,json)")
 	pprofEnabled     = flag.Bool("enable-pprof", false, "enabled pprof at localhost:6060")
-	discoveryEnabled = flag.Bool("enable-discovery", true, "enables grpc service discovery")
+	discoveryEnabled = flag.Bool("enable-discovery", false, "enables grpc service discovery")
 )
 
 func loggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 
 	//log.Printf("\n\nRequest: %+v \n\n", req)
-	slog.InfoCtx(ctx, "request received", "method", info.FullMethod)
+	slog.InfoContext(ctx, "request received", "method", info.FullMethod)
 	defer func() {
 		//log.Printf("\n\nResponse: %+v \n\n", resp)
-		slog.InfoCtx(ctx, "sent response")
+		slog.InfoContext(ctx, "sent response")
 		if err != nil {
 			slog.ErrorCtx(ctx, "error", "reason", err)
 		}
@@ -115,7 +115,9 @@ func main() {
 	// profiler
 	if *pprofEnabled {
 		go func() {
-			log.Println(http.ListenAndServe("localhost:6060", nil))
+			if errProfiler := http.ListenAndServe("localhost:6060", nil); errProfiler != nil {
+				slog.Error("could not start profiler", "error", errProfiler)
+			}
 		}()
 	}
 
@@ -155,7 +157,5 @@ func main() {
 	if err := s.Serve(listener); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
-
-	slog.Info("server: bye!")
 
 }

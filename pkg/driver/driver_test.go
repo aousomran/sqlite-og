@@ -37,10 +37,8 @@ var grpcServer *grpc.Server
 var connectionManager *connections.Manager
 
 func insertRandomData(db *sql.DB, numRows int) error {
-	// Seed the random number generator
 	rand.Seed(time.Now().UnixNano())
 
-	// Define a function to generate random dates within a specified range
 	randomDate := func(min, max time.Time) time.Time {
 		delta := max.Sub(min)
 		randomDelta := time.Duration(rand.Int63n(int64(delta)))
@@ -128,7 +126,7 @@ func setupGRPCServer(t *testing.T) {
 	go func() {
 		errServe := grpcServer.Serve(Listener)
 		if errServe != nil {
-			t.Errorf("grpc serve error %v", errServe)
+			require.NoError(t, errServe)
 			return
 		}
 		t.Logf("grpc server listening on %s", Listener.Addr().String())
@@ -256,7 +254,7 @@ func TestCRUD(t *testing.T) {
 			CallbacksEnabled: true,
 		})
 
-		dsn := fmt.Sprintf("%s/%s", Listener.Addr().String(), databaseName)
+		dsn := fmt.Sprintf("%s/%s", "localhost:9090", databaseName)
 		db, err := sql.Open("og_custom", dsn)
 
 		rows, err := db.Query(`select say_hello(?)`, "ao")
