@@ -17,5 +17,5 @@ as the name suggest it uses grpc as the database wire protocol.
 
 - Run via docker
     ```shell
-    docker run -p 9091:9091 aousomran/sqliteog:latest
+    docker run -p 9091:9091 aousomran/sqlite-og:latest
     ```
