@@ -22,7 +22,7 @@ jobs:
         go-version: '1.21'
 
     - name: Build
-      run: go build -v -o ./bin/server ./cmd/server/main.go
+      run: go build -v -o ./bin/sqliteogd ./cmd/sqliteogd/main.go
 
       # Install gotestfmt on the VM running the action.
     - name: Set up gotestfmt

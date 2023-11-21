@@ -15,6 +15,10 @@ as the name suggest it uses grpc as the database wire protocol.
 
 ### Installation
 
+- Via go install
+  ```shell
+  go install github.com/aousomran/sqlite-og/cmd/sqliteogd
+  ```
 - Run via docker
     ```shell
     docker run -p 9091:9091 aousomran/sqlite-og:latest

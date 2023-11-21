@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=1 GOOS=linux go build -o sqliteog -a -ldflags '-w -extldflags "-static"' ./cmd/server/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o sqliteogd -a -ldflags '-w -extldflags "-static"' ./cmd/sqliteogd/main.go
 
 FROM alpine:latest
 
@@ -17,4 +17,4 @@ COPY --from=builder /app .
 
 RUN apk --no-cache add sqlite
 
-CMD ["/app/sqliteog"]
+CMD ["/app/sqliteogd"]
