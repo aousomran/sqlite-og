@@ -21,21 +21,18 @@ type Columns []string
 type RowFields *[]string
 type Rows []RowFields
 
-type callbackFunction func(args ...string) string
-
-func datetimeTrunc(args ...string) string {
-	if len(args) < 2 {
-		return ""
-	}
-	return strings.Split(args[1], " ")[0] + " 00:00:00"
-}
+type callbackFunction func(args ...interface{}) string
 
 func makeCallbackFunc(functionName string, channels *callback.CallbackChannels) callbackFunction {
-	return func(args ...string) string {
+	return func(args ...interface{}) string {
 		slog.Debug("got invocation from DB", "func_name", functionName, "args", args)
+		args2 := make([]string, 0)
+		for _, v := range args {
+			args2 = append(args2, fmt.Sprintf("%v", v))
+		}
 		channels.ChanSend <- &pb.Invoke{
 			FunctionName: functionName,
-			Args:         args,
+			Args:         args2,
 		}
 		result := <-channels.ChanReceive
 		slog.Debug("received result sending back to DB", "result", result.GetResult())
@@ -54,10 +51,6 @@ func registerDriver(driverName string, functions []string, channels *callback.Ca
 				err := conn.RegisterFunc(name, makeCallbackFunc(name, channels), true)
 				if err != nil {
 					slog.Error("unable to register function", "name", name, "error", err.Error())
-					return err
-				}
-				err = conn.RegisterFunc("dt_trunc", datetimeTrunc, true)
-				if err != nil {
 					return err
 				}
 			}
@@ -135,7 +128,7 @@ func (w *DBWrapper) Query(ctx context.Context, sql string, params ...interface{}
 	defer func() {
 		errClose := rows.Close()
 		if errClose != nil {
-			slog.ErrorCtx(ctx, "unable to close rows", "error", errClose)
+			slog.ErrorContext(ctx, "unable to close rows", "error", errClose)
 		}
 	}()
 

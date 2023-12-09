@@ -105,7 +105,7 @@ func (s *Server) Callback(cbs pb.SqliteOG_CallbackServer) error {
 	slog.InfoContext(ctx, "got connection id", "cnx_id", cnxIdSlice[0])
 	db, err := s.Manager.GetConnection(cnxIdSlice[0])
 	if err != nil {
-		slog.Error("cannot get database from manager", "error", err)
+		slog.ErrorContext(ctx, "cannot get database from manager", "error", err)
 	}
 
 	wg := sync.WaitGroup{}
@@ -190,6 +190,7 @@ func (s *Server) IsValid(ctx context.Context, in *pb.ConnectionId) (*pb.Empty, e
 
 func (s *Server) Ping(ctx context.Context, _ *pb.Empty) (*pb.Empty, error) {
 	// All we want for now is that this server is reachable
+	// TODO: should probably validate DSN and do an actual ping
 	return &pb.Empty{}, nil
 }
 
@@ -205,14 +206,14 @@ func (s *Server) ResetSession(ctx context.Context, in *pb.ConnectionId) (*pb.Con
 func (s *Server) Query(ctx context.Context, in *pb.Statement) (*pb.QueryResult, error) {
 	db, err := s.Manager.GetConnection(in.GetCnxId())
 	if err != nil {
-		slog.Error("cannot get database from manager", "error", err)
+		slog.ErrorContext(ctx, "cannot get database from manager", "error", err)
 		return nil, err
 	}
 
 	params := toInterfaceSlice(in.GetParams())
 	columns, columnTypes, rows, err := db.Query(ctx, in.GetSql(), params...)
 	if err != nil {
-		slog.Error("error calling db.Query", "error", err.Error())
+		slog.ErrorContext(ctx, "error calling db.Query", "error", err.Error())
 		return nil, err
 	}
 
